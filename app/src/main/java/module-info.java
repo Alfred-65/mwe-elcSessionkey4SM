@@ -24,7 +24,7 @@
  *
  * <p>This module exports nothing.
  */
-module de.gematik.smartcards.mwe.elcSessionkey4SM {
+module de.gematik.smartcards.mwe.elc_sessionkey4sm {
   requires static lombok;
   requires de.gematik.smartcards.g2icc;
   requires spring.core;
