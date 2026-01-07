@@ -2,6 +2,7 @@
 This project contains an MWE (minimal working example) which establishes a
 trusted channel to an ICC from Germany's telematic infrastructure for reference
 and test environment (RU/TU).
+Afterward, content from file "EF.EF.C.CH.AUT.E256" in "DF.ESIGN" is retrieved.
 
 ## Changelog
 See [CHANGELOG.md](CHANGELOG.md).
