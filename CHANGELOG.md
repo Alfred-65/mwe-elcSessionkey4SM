@@ -13,6 +13,10 @@ following sections (if non-empty):
 
 The versioning policy of this project follows [Semantic Versioning v2.0.0][].
 
+## vx.y.z, 202x-yy-zz
+Summary of changes in x.y.z since 0.0.2:
+1. TODO
+
 ## v0.0.2, 2026-01-07
 Summary of changes in 0.0.2 since 0.0.1:
 1. Fixed: typo in module definition and build-script

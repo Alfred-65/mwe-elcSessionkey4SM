@@ -255,7 +255,7 @@ public final class App {
       rsp = unprotectIsoCase3(rsp, kMac, ssc);
       checkSw(rsp, 0x9000);
 
-      // --- Read Binary, read EF.C.CH.AUT.E256
+      // --- Read Binary, read EF.C.CH.AUT.E256 (with secure messaging)
       log.atDebug().log("SceReadX.509, element 3: read EF.C.CH.AUT.E256");
       cmd = readX509(kMac, ssc);
       rsp = cc.transmit(cmd);
