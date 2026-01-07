@@ -4,7 +4,7 @@ trusted channel to an ICC from Germany's telematic infrastructure for reference
 and test environment (RU/TU).
 
 ## Changelog
-Each module provides a "CHANGELOG.md" file, see there.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 Currently, there is no roadmap.
