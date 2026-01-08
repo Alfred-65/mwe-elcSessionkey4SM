@@ -28,4 +28,5 @@ module de.gematik.smartcards.mwe.elc_sessionkey4sm {
   requires static lombok;
   requires de.gematik.smartcards.g2icc;
   requires spring.core;
+  requires spring.boot;
 } // end module

@@ -13,9 +13,11 @@ following sections (if non-empty):
 
 The versioning policy of this project follows [Semantic Versioning v2.0.0][].
 
-## vx.y.z, 202x-yy-zz
-Summary of changes in x.y.z since 0.0.2:
-1. TODO
+## v0.1.0, 2026-01-08
+Summary of changes in 0.1.0 since 0.0.2:
+1. changed:
+   1. for secure messaging command data is always transferred as plain text
+   2. improve logging of APDU
 
 ## v0.0.2, 2026-01-07
 Summary of changes in 0.0.2 since 0.0.1:

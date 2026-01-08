@@ -49,7 +49,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
+import javax.smartcardio.CardChannel;
+import javax.smartcardio.CardException;
 import javax.smartcardio.CardTerminals;
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
@@ -57,6 +60,7 @@ import javax.smartcardio.TerminalFactory;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.jetbrains.annotations.VisibleForTesting;
+import org.springframework.boot.logging.LogLevel;
 
 /** Main class of the MWE. */
 @Slf4j
@@ -121,14 +125,12 @@ public final class App {
       // --- Select MF
       log.atDebug().log("SceOpenEgk, element 1: select MF");
       cmd = new CommandAPDU(Hex.toByteArray("00 a4 040c   07 D2760001448000"));
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000);
+      send(cc, cmd, 0x9000);
 
       // --- Read Binary: retrieve content of EF.Version2
       log.atDebug().log("SceOpenEgk, element 2: read EF.Version2");
       cmd = new CommandAPDU(Hex.toByteArray("00 b0 9100   00"));
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000, 0x6281);
+      rsp = send(cc, cmd, 0x9000, 0x6281);
       showEfVersion2(rsp);
 
       // ###########################################################################
@@ -137,8 +139,7 @@ public final class App {
       // --- Read Binary: retrieve Sub-CA-CVC from eGK
       log.atDebug().log("SceReadCvc, element 1: read EF.C.CA.CS.E256");
       cmd = new CommandAPDU(Hex.toByteArray("00 b0 8700   00"));
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000, 0x6281);
+      rsp = send(cc, cmd, 0x9000, 0x6281);
       val egkCaCvc = new Cvc(rsp.getData());
       log.atTrace().log("Sub-CA-CVC:{}{}", LINE_SEPARATOR, egkCaCvc);
       if (!Cvc.SignatureStatus.SIGNATURE_VALID.equals(egkCaCvc.getSignatureStatus())) {
@@ -148,8 +149,7 @@ public final class App {
       // --- Read Binary: retrieve End-Entity-CVC from eGK
       log.atDebug().log("SceReadCvc, element 2: read EF.C.eGK.AUT_CVC.E256");
       cmd = new CommandAPDU(Hex.toByteArray("00 b0 8600   00"));
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000, 0x6281);
+      rsp = send(cc, cmd, 0x9000, 0x6281);
       val egkEeCvc = new Cvc(rsp.getData());
       log.atTrace().log("End-Entity-CVC:{}{}", LINE_SEPARATOR, egkEeCvc);
       if (!Cvc.SignatureStatus.SIGNATURE_VALID.equals(egkEeCvc.getSignatureStatus())) {
@@ -159,8 +159,7 @@ public final class App {
       // --- List Public Key: retrieve key-identifier of public keys cached by eGK
       log.atDebug().log("SceReadCvc, element 3: List Public Key");
       cmd = new CommandAPDU(Hex.toByteArray("80 ca 0100   00   0000"));
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000, 0x6281);
+      rsp = send(cc, cmd, 0x9000, 0x6281);
       val listKeyIdentifier = extractKeyIdentifier(rsp);
       log.atTrace().log("keyIdentifier from cache: {}", listKeyIdentifier);
 
@@ -189,22 +188,19 @@ public final class App {
       // ###########################################################################
       log.atDebug().log("SceTC1, element 1: MSE set PrK.eGK.AUT_CVC.E256 for elcSessionkey4SM");
       cmd = new CommandAPDU(Hex.toByteArray("00 22 41A4   06 (84-01-09) || (80-01-54)"));
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000);
+      send(cc, cmd, 0x9000);
 
       // element 2, import CVC-chain
       for (int i = chain.size(); i-- > 0; ) { // NOPMD assignment in operand
         log.atDebug().log("SceTC1, element 2.1: MSE Set, see (N103.300)");
         val crt = BerTlv.getInstance(0x83, chain.get(i).getCar()).getEncoded();
         cmd = new CommandAPDU(0x00, 0x22, 0x81, 0xb6, crt);
-        rsp = cc.transmit(cmd);
-        checkSw(rsp, 0x9000);
+        send(cc, cmd, 0x9000);
 
         log.atDebug().log("SceTC1, element 2.2: PSO Verify Certificate, see (N095.410)");
         val template = chain.get(i).getValueField();
         cmd = new CommandAPDU(0x00, 0x2a, 0x00, 0xbe, template);
-        rsp = cc.transmit(cmd);
-        checkSw(rsp, 0x9000);
+        send(cc, cmd, 0x9000);
       } // end For (i...)
 
       // --- General Authenticate, step 1
@@ -213,8 +209,7 @@ public final class App {
           BerTlv.getInstance(0x7c, BerTlv.getInstance(0xc3, myEeCvc.getChr()).getEncoded())
               .getEncoded();
       cmd = new CommandAPDU(0x10, 0x86, 0x00, 0x00, cmdDataField, 256);
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000);
+      rsp = send(cc, cmd, 0x9000);
 
       // ###########################################################################
       // ##########          Commands from A_27003, SceReadX.509          ##########
@@ -233,8 +228,7 @@ public final class App {
       val my7c = BerTlv.getInstance(0x7c, my85.getEncoded());
       log.atDebug().log("SceReadX.509, element 1: General Authenticate, step 2");
       cmd = new CommandAPDU(0x00, 0x86, 0x00, 0x00, my7c.getEncoded());
-      rsp = cc.transmit(cmd);
-      checkSw(rsp, 0x9000);
+      send(cc, cmd, 0x9000);
 
       // --- calculate session key context
       val k1 = // (N085.056)c.1
@@ -242,25 +236,21 @@ public final class App {
       val k2 = AfiElcUtils.sharedSecret(myPrivatekey, ephemeralPukOpponent); // (N085.056)c.1
       val kd = AfiUtils.concatenate(k1, k2); // (N085.056)c.3
       log.atTrace().log("key derivation data, kd = '{}'", Hex.toHexDigits(kd));
-      val kdEnc = AfiUtils.concatenate(kd, Hex.toByteArray("0000 0001"));
       val kdMac = AfiUtils.concatenate(kd, Hex.toByteArray("0000 0002"));
-      val kEnc = new AesKey(EafiHashAlgorithm.SHA_1.digest(kdEnc), 0, 16);
       val kMac = new AesKey(EafiHashAlgorithm.SHA_1.digest(kdMac), 0, 16);
       val ssc = new byte[16]; // Send Sequence Counter
 
       // --- Select DF.ESIGN (with secure messaging)
       log.atDebug().log("SceReadX.509, element 2: Select DF.ESIGN");
-      cmd = selectDfEsign(kEnc, kMac, ssc);
-      rsp = cc.transmit(cmd);
-      rsp = unprotectIsoCase3(rsp, kMac, ssc);
-      checkSw(rsp, 0x9000);
+      cmd = selectDfEsign(kMac, ssc);
+      rsp = send(cc, cmd, 0x9000);
+      unprotectDataAbsent(rsp, kMac, ssc);
 
       // --- Read Binary, read EF.C.CH.AUT.E256 (with secure messaging)
       log.atDebug().log("SceReadX.509, element 3: read EF.C.CH.AUT.E256");
       cmd = readX509(kMac, ssc);
-      rsp = cc.transmit(cmd);
-      rsp = unprotectIsoCase4(rsp, kMac, ssc);
-      checkSw(rsp, 0x9000, 0x6281);
+      rsp = send(cc, cmd, 0x9000, 0x6281);
+      rsp = unprotectDataPresent(rsp, kMac, ssc);
       val rawX509 = rsp.getData();
       val x509 = X509Utils.generateCertificate(rawX509);
       log.atInfo().log("X.509 AUT.E256:{}{}", LINE_SEPARATOR, x509);
@@ -271,6 +261,54 @@ public final class App {
       log.atError().log(UNEXPECTED, e);
     } // end Catch (...)
     log.atInfo().log("main: end");
+  } // end method */
+
+  /**
+   * Send and receive.
+   *
+   * <p>This method sends a command APDU and receives the corresponding response APDU. A
+   * human-friendly version of APDU is logged at {@link LogLevel#DEBUG}. Octet string versions of
+   * APDU are logged at {@link LogLevel#TRACE}
+   *
+   * @param cc {@link CardChannel} used for communication
+   * @param cmd command APDU
+   * @param expected list of expected status words
+   * @return corresponding response APDU
+   * @throws CardException if the card operation failed
+   * @throws IllegalArgumentException if an unexpected status word occurs
+   */
+  private static ResponseAPDU send(
+      final CardChannel cc, final CommandAPDU cmd, final int... expected) throws CardException {
+    val cmdOs = cmd.getBytes();
+    val cmdApdu = new CommandApdu(cmdOs);
+    log.atDebug().log("cmd: {}", cmdApdu);
+    log.atTrace().log("cmd: '{}'", Hex.toHexDigits(cmdOs));
+
+    val startTime = System.nanoTime();
+    val result = cc.transmit(cmd);
+    val runTime = (System.nanoTime() - startTime) * 1e-9;
+
+    val rspOs = result.getBytes();
+    val rspApdu = new ResponseApdu(rspOs);
+    log.atTrace()
+        .log("rsp: {},  '{}'", String.format("time=%7.3f s", runTime), Hex.toHexDigits(rspOs));
+    log.atDebug().log("rsp: {}", rspApdu);
+
+    val swIs = result.getSW();
+    for (val sw : expected) {
+      if (swIs == sw) {
+        // ... Status Word "swIs" matches an expected status word
+        return result;
+      } // end fi
+    } // end For (sw...)
+    // ... unexpected status word
+    log.atWarn()
+        .log(
+            "SW not in {}",
+            Arrays.stream(expected)
+                .mapToObj(i -> String.format("%04x", i))
+                .collect(Collectors.toCollection(TreeSet::new)));
+    throw new IllegalArgumentException(String.format("unexpected SW='%04x'", swIs));
   } // end method */
 
   /**
@@ -399,17 +437,14 @@ public final class App {
   /**
    * Prepare Select DF.ESIGN command with secure messaging.
    *
-   * @param kEnc encipher key
    * @param kMac CMAC key
    * @param ssc send sequence counter
    * @return Select DF.ESIGN command APDU secured with secure messaging
    */
-  private static CommandAPDU selectDfEsign(final AesKey kEnc, final AesKey kMac, final byte[] ssc) {
+  private static CommandAPDU selectDfEsign(final AesKey kMac, final byte[] ssc) {
     AfiUtils.incrementCounter(ssc); // increment send sequence counter
     val plain = Hex.toByteArray("a000000167455349474e");
-    val ivEnc = kEnc.encipherCbc(ssc);
-    val cipher = Hex.toHexDigits(kEnc.encipherCbc(kEnc.padIso(plain), ivEnc));
-    val protectedDo = BerTlv.getInstance(0x87, "01" + cipher).getEncoded();
+    val protectedDo = BerTlv.getInstance(0x81, plain).getEncoded();
     val header = Hex.toByteArray("0c a4 040c");
     val macInput = AfiUtils.concatenate(ssc, kMac.padIso(header), kMac.padIso(protectedDo));
     val mac = kMac.calculateCmac(macInput, 8); // see (N002.810)h
@@ -449,12 +484,10 @@ public final class App {
    *
    * @param kMac CMAC key
    * @param ssc send sequence counter
-   * @return unprotected response APDU
    * @throws IllegalArgumentException if anything is wrong
    */
-  private static ResponseAPDU unprotectIsoCase3(
+  private static void unprotectDataAbsent(
       final ResponseAPDU rsp, final AesKey kMac, final byte[] ssc) {
-    log.atTrace().log("protected  : {}", new ResponseApdu(rsp.getBytes()));
     AfiUtils.incrementCounter(ssc); // increment send sequence counter
     val ctlv = (ConstructedBerTlv) BerTlv.getInstance(0x20, rsp.getData());
     val swDo = ctlv.getPrimitive(0x99).orElseThrow();
@@ -468,8 +501,6 @@ public final class App {
     val result = new ResponseAPDU(swDo.getValueField());
 
     log.atTrace().log("unprotected: {}", new ResponseApdu(result.getBytes()));
-
-    return result;
   } // end method */
 
   /**
@@ -480,9 +511,8 @@ public final class App {
    * @return unprotected response APDU
    * @throws IllegalArgumentException if anything is wrong
    */
-  private static ResponseAPDU unprotectIsoCase4(
+  private static ResponseAPDU unprotectDataPresent(
       final ResponseAPDU rsp, final AesKey kMac, final byte[] ssc) {
-    log.atTrace().log("protected  : {}", new ResponseApdu(rsp.getBytes()));
     AfiUtils.incrementCounter(ssc); // increment send sequence counter
     val ctlv = (ConstructedBerTlv) BerTlv.getInstance(0x20, rsp.getData());
     val plainDo = ctlv.getPrimitive(0x81).orElseThrow();
@@ -501,20 +531,5 @@ public final class App {
     log.atTrace().log("unprotected: {}", new ResponseApdu(result.getBytes()));
 
     return result;
-  } // end method */
-
-  /**
-   * Check for unwanted status codes.
-   *
-   * @param rsp response APDU
-   * @param expected list of expected status words
-   * @throws IllegalArgumentException if an unexpected status word occurs
-   */
-  private static void checkSw(final ResponseAPDU rsp, final int... expected) {
-    val collection = Arrays.stream(expected).boxed().collect(Collectors.toSet());
-
-    if (!collection.contains(rsp.getSW())) {
-      throw new IllegalArgumentException(String.format("unexpected SW='%04x'", rsp.getSW()));
-    } // end fi
   } // end method */
 } // end class
